@@ -1,0 +1,13 @@
+numpy<2
+pandas
+pyyaml
+matplotlib
+scikit-learn
+tqdm
+ipykernel
+seaborn
+ruff
+black
+pre-commit
+librosa
+soundfile
