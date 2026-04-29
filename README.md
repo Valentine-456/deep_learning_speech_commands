@@ -1,15 +1,15 @@
-# CINIC-10 Image Classification Project
+# Speech Commands Classification with Transformers
 
-This project trains and compares image classification models on the CINIC-10 dataset using PyTorch.
+This project trains and compares speech classification models (CNN, LSTM/GRU, Transformer) on the TensorFlow Speech Commands dataset using PyTorch.
 
 ---
 
 ## 1. Clone the Repository
 
 ```bash
-git clone <REPO_URL>
-cd <REPO_NAME>
-````
+git clone https://github.com/Valentine-456/deep_learning_speech_commands
+cd deep_learning_speech_commands
+```
 
 ---
 
@@ -55,22 +55,33 @@ pre-commit install
 
 ---
 
-## 4. Download CINIC-10 Dataset
+## 4. Download Speech Commands Dataset
 
 Download the dataset from:
 
-[https://www.kaggle.com/datasets/mengcius/cinic10](https://www.kaggle.com/datasets/mengcius/cinic10)
+[https://www.kaggle.com/datasets/neehakadyan/tensorflow-speech-commands-dataset](https://www.kaggle.com/datasets/neehakadyan/tensorflow-speech-commands-dataset)
 
 Unzip it and place it inside the project directory with the following structure:
 
 ```text
-  cinic10/
-    train/
-    valid/
-    test/
+  data/
+    speech_commands/
+      yes/
+      no/
+      up/
+      down/
+      left/
+      right/
+      on/
+      off/
+      stop/
+      go/
+      _silence_/
+      _unknown_/
+      ...
 ```
 
-Each of the `train`, `valid`, and `test` folders must contain 10 class subfolders.
+Each subfolder contains `.wav` audio files (1 second, 16 kHz).
 
 IMPORTANT:
 
@@ -91,7 +102,7 @@ Expected output example:
 
 ```text
 Using device: cuda
-Batch images shape: torch.Size([64, 3, 32, 32])
+Batch audio shape: torch.Size([64, 1, 128, 128])
 Batch labels shape: torch.Size([64])
 ```
 
@@ -99,29 +110,26 @@ If you see similar output, the dataset pipeline is working correctly.
 
 ## 6. Train a Baseline Model
 
-To run a real training experiment, use the new training entrypoint. The example below trains the default small CNN for one epoch and stores metrics in `runs/`:
+To run a real training experiment, use the training entrypoint. The example below trains the CNN baseline for one epoch and stores metrics in `runs/`:
 
 ```bash
-python -m src.train --epochs 1 --model small_cnn --augmentation standard
+python -m src.train --epochs 1 --model cnn --feature melspectrogram
 ```
 
 You can also use the shared YAML config for a reproducible baseline:
 
 ```bash
-python -m src.train --config configs/baseline_small_cnn.yaml
+python -m src.train --config configs/baseline_cnn.yaml
 ```
 
 Useful flags for the report experiments:
 
-* `--model small_cnn|resnet18|efficientnet_b0`
-* `--pretrained` to enable ImageNet weights for supported backbones
-* `--train_fraction 0.25` for reduced-data experiments
-* `--few_shot_per_class 5` for few-shot experiments
-* `--augmentation none|standard|strong`
-* `--advanced_aug none|mixup|cutmix`
+* `--model cnn|lstm|transformer`
+* `--feature melspectrogram|mfcc`
+* `--classes 2` to train on a 2-class subset ("yes"/"no") first
+* `--augmentation none|specaugment`
+* `--silence_strategy baseline|two_stage|oversample`
 * `--seed 42` for reproducibility
-* `--transfer_strategy two_phase` to freeze the backbone first and fine-tune later
-* `--freeze_epochs 5` and `--finetune_lr 1e-4` for pretrained transfer learning
 
 ---
 
@@ -142,8 +150,9 @@ runs/       - training outputs (not tracked by git)
 
 After confirming dataset loading works:
 
-1. Run the baseline CNN experiment.
-2. Compare it with at least one pretrained backbone.
-3. Sweep training and regularization hyperparameters.
-4. Add reduced-data and few-shot runs.
-5. Record validation and test accuracy, mean, and standard deviation across repeats.
+1. Run the CNN baseline on 2 classes ("yes" vs "no").
+2. Expand to 10+ classes including silence and unknown.
+3. Implement and compare LSTM/GRU and Transformer encoder.
+4. Sweep hyperparameters (learning rate, layers, attention heads, dropout).
+5. Evaluate silence/unknown handling strategies.
+6. Record validation and test accuracy per model and generate confusion matrices.
