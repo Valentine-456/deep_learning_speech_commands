@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 
 
-class RNNClassifier(nn.Module):
-    """LSTM or GRU on MFCC sequences. Input: (batch, time_frames, n_mfcc)."""
+class LSTMClassifier(nn.Module):
+    """Bidirectional LSTM on MFCC sequences. Input: (batch, time_frames, n_mfcc)."""
 
     def __init__(
         self,
@@ -11,13 +11,11 @@ class RNNClassifier(nn.Module):
         input_size: int = 40,
         hidden_size: int = 128,
         num_layers: int = 2,
-        rnn_type: str = "gru",
-        dropout: float = 0.3,
         bidirectional: bool = True,
+        dropout: float = 0.3,
     ):
         super().__init__()
-        rnn_cls = nn.LSTM if rnn_type.lower() == "lstm" else nn.GRU
-        self.rnn = rnn_cls(
+        self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -32,5 +30,5 @@ class RNNClassifier(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out, _ = self.rnn(x)
+        out, _ = self.lstm(x)
         return self.classifier(out[:, -1, :])

@@ -11,3 +11,5 @@ black
 pre-commit
 librosa
 soundfile
+scipy
+plotly

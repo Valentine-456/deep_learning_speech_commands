@@ -1,152 +1,93 @@
+import json
 import random
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
+import numpy as np
 import torch
-import torchaudio
 from torch.utils.data import Dataset
-
-from .features.extraction import get_mel_spectrogram, get_mfcc, SAMPLE_RATE, N_SAMPLES
-
-CORE_COMMANDS = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
-SILENCE_LABEL = "silence"
-UNKNOWN_LABEL = "unknown"
-
-# How many 1-second silence clips to generate per noise file
-_SILENCE_CLIPS_PER_FILE = 400
 
 
 class SpeechCommandsDataset(Dataset):
     """
-    TF Speech Commands dataset.
+    Loads pre-computed mel / mfcc .npy features from a cache directory
+    produced by scripts/preprocess.py.
 
-    split:   "train" | "val" | "test"
-    feature: "mel"   → (1, n_mels, time_frames) for CNN
-             "mfcc"  → (time_frames, n_mfcc)    for RNN / Transformer
-    classes: core command labels to keep (default: CORE_COMMANDS)
+    cache_dir layout:
+        <cache_dir>/
+            metadata.json
+            <split>/mel/<label>/<i>.npy
+            <split>/mfcc/<label>/<i>.npy
 
-    Silence is generated from _background_noise_ long recordings.
-    Unknown covers all labeled commands not in `classes`.
+    Args:
+        cache_dir:   root of the pre-processed cache (e.g. "data/cache")
+        split:       "train" | "val" | "test"
+        feature:     "mel" | "mfcc"
+        augment:     apply SpecAugment (mel) or time-mask + noise (mfcc); train only
     """
 
     def __init__(
         self,
-        root: str,
+        cache_dir: str,
         split: str = "train",
         feature: str = "mel",
-        classes: Optional[List[str]] = None,
-        include_silence: bool = True,
-        include_unknown: bool = True,
-        silence_clips_per_file: int = _SILENCE_CLIPS_PER_FILE,
-        seed: int = 42,
+        augment: bool = False,
     ):
-        self.root = Path(root)
-        self.split = split
         self.feature = feature
+        self.augment = augment
 
-        core = list(classes) if classes is not None else list(CORE_COMMANDS)
+        root = Path(cache_dir)
+        meta = json.loads((root / "metadata.json").read_text())
 
-        all_labels: List[str] = list(core)
-        if include_silence:
-            all_labels.append(SILENCE_LABEL)
-        if include_unknown:
-            all_labels.append(UNKNOWN_LABEL)
+        self.classes      = meta["classes"]
+        self.class_to_idx = meta["class_to_idx"]
 
-        self.classes = all_labels
-        self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
+        feature_dir = root / split / feature
+        if not feature_dir.exists():
+            raise FileNotFoundError(
+                f"{feature_dir} not found — run scripts/preprocess.py first"
+            )
 
-        val_set = self._load_list("validation_list.txt")
-        test_set = self._load_list("testing_list.txt")
-
-        # (path, label_idx, offset_samples_or_None)
-        self.samples: List[Tuple[str, int, Optional[int]]] = []
-
-        audio_dir = self.root / "audio"
-        for class_dir in sorted(audio_dir.iterdir()):
-            if not class_dir.is_dir():
+        self.samples: List[Tuple[str, int]] = []
+        for label_dir in sorted(feature_dir.iterdir()):
+            if not label_dir.is_dir():
                 continue
-            name = class_dir.name
-
-            if name == "_background_noise_":
-                if include_silence:
-                    self._add_silence_samples(
-                        class_dir, silence_clips_per_file, seed, val_set, test_set
-                    )
-                continue
-
-            if name in core:
-                label = name
-            elif include_unknown:
-                label = UNKNOWN_LABEL
-            else:
-                continue
-
-            label_idx = self.class_to_idx[label]
-            for wav in sorted(class_dir.glob("*.wav")):
-                rel = f"{name}/{wav.name}"
-                if split == "test" and rel not in test_set:
-                    continue
-                if split == "val" and rel not in val_set:
-                    continue
-                if split == "train" and (rel in val_set or rel in test_set):
-                    continue
-                self.samples.append((str(wav), label_idx, None))
-
-    def _load_list(self, filename: str) -> set:
-        path = self.root / filename
-        if not path.exists():
-            return set()
-        return {line.strip() for line in path.read_text().splitlines() if line.strip()}
-
-    def _add_silence_samples(
-        self,
-        noise_dir: Path,
-        clips_per_file: int,
-        seed: int,
-        val_set: set,
-        test_set: set,
-    ) -> None:
-        rng = random.Random(seed)
-        label_idx = self.class_to_idx[SILENCE_LABEL]
-
-        for wav in sorted(noise_dir.glob("*.wav")):
-            info = torchaudio.info(str(wav))
-            total_samples = info.num_frames
-            if total_samples <= N_SAMPLES:
-                continue
-
-            max_offset = total_samples - N_SAMPLES
-            offsets = [rng.randint(0, max_offset) for _ in range(clips_per_file)]
-
-            # Deterministic split for silence: last 10% → test, prev 10% → val
-            n = len(offsets)
-            val_start = int(n * 0.8)
-            test_start = int(n * 0.9)
-
-            for i, offset in enumerate(offsets):
-                if self.split == "test" and i >= test_start:
-                    self.samples.append((str(wav), label_idx, offset))
-                elif self.split == "val" and val_start <= i < test_start:
-                    self.samples.append((str(wav), label_idx, offset))
-                elif self.split == "train" and i < val_start:
-                    self.samples.append((str(wav), label_idx, offset))
+            label = label_dir.name
+            idx   = self.class_to_idx[label]
+            for npy in sorted(label_dir.glob("*.npy")):
+                self.samples.append((str(npy), idx))
 
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
-        path, label_idx, offset = self.samples[idx]
-        if offset is not None:
-            waveform, sr = torchaudio.load(path, frame_offset=offset, num_frames=N_SAMPLES)
-        else:
-            waveform, sr = torchaudio.load(path)
-
-        if sr != SAMPLE_RATE:
-            waveform = torchaudio.functional.resample(waveform, sr, SAMPLE_RATE)
-
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
+        path, label_idx = self.samples[index]
+        x = torch.from_numpy(np.load(path))
         if self.feature == "mel":
-            return get_mel_spectrogram(waveform), label_idx
-        return get_mfcc(waveform), label_idx
+            x = x.unsqueeze(0)  # (n_mels, T) → (1, n_mels, T) for Conv2d
+        if self.augment:
+            x = self._augment(x)
+        return x, label_idx
+
+    def _augment(self, x: torch.Tensor) -> torch.Tensor:
+        if self.feature == "mel":
+            # x: (1, n_mels, time_frames) — SpecAugment: frequency + time masking
+            x = x.clone()
+            n_mels, n_frames = x.shape[1], x.shape[2]
+            f = random.randint(0, 15)
+            f0 = random.randint(0, max(0, n_mels - f))
+            x[:, f0:f0 + f, :] = 0.0
+            t = random.randint(0, 20)
+            t0 = random.randint(0, max(0, n_frames - t))
+            x[:, :, t0:t0 + t] = 0.0
+        else:
+            # x: (time_frames, n_mfcc) — time masking + Gaussian noise
+            x = x.clone()
+            t = random.randint(0, 20)
+            t0 = random.randint(0, max(0, x.shape[0] - t))
+            x[t0:t0 + t, :] = 0.0
+            x = x + torch.randn_like(x) * 0.05
+        return x
 
     @property
     def num_classes(self) -> int:

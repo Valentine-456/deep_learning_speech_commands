@@ -1,0 +1,23 @@
+model:
+  type: visual_transformer
+  patch_h: 16
+  patch_w: 16
+  d_model: 128
+  num_heads: 4
+  num_layers: 4
+  dim_feedforward: 256
+  dropout: 0.1
+
+data:
+  cache_dir: data/cache
+  feature: mel          # ViT operates on 2D spectrograms
+  augmentation: true
+
+training:
+  epochs: 110
+  batch_size: 64
+  lr: 0.0001
+  workers: 4
+  seed: 42
+  early_stopping_patience: 7
+  out_dir: results

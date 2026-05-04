@@ -17,21 +17,25 @@ class _ConvBlock(nn.Module):
 
 
 class CNNClassifier(nn.Module):
-    """CNN on Mel spectrograms. Input: (batch, 1, n_mels, time_frames)."""
+    """CNN on mel spectrograms. Input: (batch, 1, n_mels, time_frames)."""
 
-    def __init__(self, num_classes: int, dropout: float = 0.25):
+    def __init__(
+        self,
+        num_classes: int,
+        channels: tuple = (32, 64, 128, 256),
+        dropout: float = 0.25,
+    ):
         super().__init__()
-        self.features = nn.Sequential(
-            _ConvBlock(1, 32),
-            _ConvBlock(32, 64),
-            _ConvBlock(64, 128),
-            _ConvBlock(128, 256),
-        )
+        layers, in_ch = [], 1
+        for out_ch in channels:
+            layers.append(_ConvBlock(in_ch, out_ch))
+            in_ch = out_ch
+        self.features = nn.Sequential(*layers)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
             nn.Flatten(),
             nn.Dropout(dropout),
-            nn.Linear(256, num_classes),
+            nn.Linear(channels[-1], num_classes),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
