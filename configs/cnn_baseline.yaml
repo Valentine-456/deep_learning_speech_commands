@@ -1,7 +1,7 @@
 model:
   type: cnn
   channels: [32, 64, 128, 256]
-  dropout: 0.1
+  dropout: 0.2
 
 data:
   cache_dir: data/cache

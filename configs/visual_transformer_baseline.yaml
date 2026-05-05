@@ -6,11 +6,11 @@ model:
   num_heads: 4
   num_layers: 4
   dim_feedforward: 256
-  dropout: 0.1
+  dropout: 0.2
 
 data:
   cache_dir: data/cache
-  feature: mel          # ViT operates on 2D spectrograms
+  feature: mel # ViT operates on 2D spectrograms
   augmentation: true
 
 training:
@@ -19,5 +19,5 @@ training:
   lr: 0.0001
   workers: 4
   seed: 42
-  early_stopping_patience: 7
+  early_stopping_patience: 10
   out_dir: results

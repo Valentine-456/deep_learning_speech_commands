@@ -1,22 +1,22 @@
 model:
   type: transformer
-  input_size: 40        # n_mfcc
-  d_model: 128
-  num_heads: 4
-  num_layers: 2
-  dim_feedforward: 256
-  dropout: 0.1
+  input_size: 40 # n_mfcc
+  d_model: 256
+  num_heads: 8
+  num_layers: 4
+  dim_feedforward: 512
+  dropout: 0.3
 
 data:
   cache_dir: data/cache
-  feature: mfcc         # mel | mfcc
+  feature: mfcc # mel | mfcc
   augmentation: true
 
 training:
-  epochs: 40
+  epochs: 80
   batch_size: 64
   lr: 0.0003
   workers: 4
   seed: 42
-  early_stopping_patience: 7
+  early_stopping_patience: 10
   out_dir: results

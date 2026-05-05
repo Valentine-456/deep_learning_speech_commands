@@ -1,21 +1,21 @@
 model:
   type: lstm
-  input_size: 40        # n_mfcc
-  hidden_size: 128
-  num_layers: 2
+  input_size: 40 # n_mfcc
+  hidden_size: 256
+  num_layers: 3
   bidirectional: true
-  dropout: 0.1
+  dropout: 0.2
 
 data:
   cache_dir: data/cache
-  feature: mfcc         # mel | mfcc
+  feature: mfcc # mel | mfcc
   augmentation: true
 
 training:
-  epochs: 40
+  epochs: 70
   batch_size: 64
   lr: 0.001
   workers: 4
   seed: 42
-  early_stopping_patience: 7
+  early_stopping_patience: 10
   out_dir: results
